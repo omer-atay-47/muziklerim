@@ -1,0 +1,38 @@
+// Basit SVG simge seti (24x24)
+const P = {
+  compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  library: '<path d="M4 4v16M9 4v16"/><path d="m14 4.5 5 15"/>',
+  play: '<path d="M7 4.5v15l12.5-7.5z" class="f"/>',
+  pause: '<path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" class="f"/>',
+  next: '<path d="M5 5v14l10-7zM16.5 5h2.5v14h-2.5z" class="f"/>',
+  prev: '<path d="M19 5v14L9 12zM5 5h2.5v14H5z" class="f"/>',
+  shuffle: '<path d="M16 4h4v4M4 20 20 4M20 16v4h-4M14.5 14.5 20 20M4 4l5 5"/>',
+  repeat: '<path d="m17 2 3 3-3 3"/><path d="M4 11v-1a5 5 0 0 1 5-5h11"/><path d="m7 22-3-3 3-3"/><path d="M20 13v1a5 5 0 0 1-5 5H4"/>',
+  repeatOne: '<path d="m17 2 3 3-3 3"/><path d="M4 11v-1a5 5 0 0 1 5-5h11"/><path d="m7 22-3-3 3-3"/><path d="M20 13v1a5 5 0 0 1-5 5H4"/><path d="M11 10.5 12.5 9.5v5"/>',
+  heart: '<path d="M12 20s-7.5-4.6-9-9.5C2 7 4.3 4.5 7 4.5c2 0 3.6 1.2 5 3 1.4-1.8 3-3 5-3 2.7 0 5 2.5 4 6-1.5 4.9-9 9.5-9 9.5z"/>',
+  heartFill: '<path class="f" d="M12 20s-7.5-4.6-9-9.5C2 7 4.3 4.5 7 4.5c2 0 3.6 1.2 5 3 1.4-1.8 3-3 5-3 2.7 0 5 2.5 4 6-1.5 4.9-9 9.5-9 9.5z"/>',
+  download: '<path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/>',
+  downloaded: '<circle cx="12" cy="12" r="9.5" class="f"/><path d="m8 12.5 2.8 2.8L16.5 9.5" class="ink"/>',
+  more: '<circle cx="12" cy="5.5" r="1.6" class="f"/><circle cx="12" cy="12" r="1.6" class="f"/><circle cx="12" cy="18.5" r="1.6" class="f"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  down: '<path d="m5 9 7 7 7-7"/>',
+  queue: '<path d="M4 6h16M4 12h10M4 18h10M17 14.5v6l4-3z"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  note: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  offline: '<path d="M3 3l18 18M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 4-2.4M19 12.5a10 10 0 0 0-2.3-1.7M2 8.8a15 15 0 0 1 4.3-2.6M22 8.8a15 15 0 0 0-11-3.6"/><circle cx="12" cy="20" r="1" class="f"/>',
+  upload: '<path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 20h14"/>',
+  playNext: '<path d="M4 6h11M4 12h11M4 18h7M15 15v6l5-3z"/>',
+  addList: '<path d="M4 6h12M4 12h12M4 18h7M17 15v6M14 18h6"/>',
+  playlist: '<path d="M4 6h16M4 11h16M4 16h9"/><circle cx="17" cy="18" r="2.5"/><path d="M19.5 18V11"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+};
+
+export function icon(name, cls = '') {
+  return `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[name] || ''}</svg>`;
+}
