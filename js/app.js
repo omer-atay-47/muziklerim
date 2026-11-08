@@ -43,15 +43,51 @@ function playButtons(getTracks) {
 }
 
 /* ================== Şarkı ekleme ================== */
-const folderSupported = 'webkitdirectory' in document.createElement('input');
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || new URLSearchParams(location.search).has('ios');
+const isStandalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+const folderSupported = !isIOS && 'webkitdirectory' in document.createElement('input');
 
 function openAdd() {
+  // iPhone'da dosya seçici doğrudan dokunuşla açılmalı
+  if (isIOS) { fileInput.click(); return; }
   const items = [
     { icon: 'note', label: 'Şarkıları seç', sub: 'Birden fazla şarkıyı birlikte seçebilirsiniz', run: () => fileInput.click() },
   ];
   if (folderSupported) items.push({ icon: 'library', label: 'Bir klasörün tamamını ekle', sub: 'Örneğin Müzik veya İndirilenler klasörü', run: () => folderInput.click() });
   items.push({ icon: 'upload', label: 'Başka uygulamadan gönder', sub: 'Paylaş → Müziklerim (nasıl yapılır?)', run: shareHelp });
   sheet({ title: 'Şarkı ekle', items });
+}
+
+function iosHelp() {
+  const body = el(`<div class="help">
+    <p><b>Şarkı Ekle</b>’ye basınca iPhone’un <b>Dosyalar</b> ekranı açılır.</p>
+    <ol>
+      <li>Şarkının durduğu yere gidin (<b>iCloud Drive</b>, <b>iPhone’umda</b> veya <b>İndirilenler</b>).</li>
+      <li>Birden fazla şarkı için sağ üstteki <b>Seç</b>’e dokunun, şarkıları işaretleyin.</li>
+      <li><b>Aç</b>’a basın. Şarkılar Müziklerim’e eklenir.</li>
+    </ol>
+    <p><b>Şarkılar Dosyalar’a nasıl gelir?</b></p>
+    <ul>
+      <li><b>WhatsApp’tan gelen şarkı:</b> şarkıya dokunun → Paylaş ${icon('upload')} → <b>Dosyalar’a Kaydet</b>.</li>
+      <li><b>Bilgisayardaki şarkılar:</b> bilgisayarda <b>icloud.com</b> → iCloud Drive’a yükleyin. iPhone’da Dosyalar → iCloud Drive’da görünür.</li>
+      <li><b>Mail ile gelen şarkı:</b> eke basılı tutun → <b>Dosyalar’a Kaydet</b>.</li>
+    </ul>
+    <p class="small">Not: Apple Music’ten indirilen şarkılar Apple’ın korumasındadır. Bu şarkıları hiçbir başka uygulama açamaz.</p>
+  </div>`);
+  sheet({ title: 'iPhone’da şarkı ekleme', body, items: [{ icon: 'downloaded', label: 'Anladım' }] });
+}
+
+function installHelp() {
+  const body = el(`<div class="help">
+    <p>Müziklerim’i iPhone’a uygulama olarak eklemek için:</p>
+    <ol>
+      <li>Bu sayfayı <b>Safari</b>’de açın.</li>
+      <li>Alttaki <b>Paylaş</b> ${icon('upload')} düğmesine dokunun.</li>
+      <li>Aşağı kaydırıp <b>Ana Ekrana Ekle</b>’ye, sonra <b>Ekle</b>’ye dokunun.</li>
+    </ol>
+    <p>Ana ekrandaki <b>Müziklerim</b> simgesinden açın. Eklediğiniz şarkılar böylece kalıcı olarak saklanır.</p>
+  </div>`);
+  sheet({ title: 'Ana ekrana ekle', body, items: [{ icon: 'downloaded', label: 'Anladım' }] });
 }
 
 function shareHelp() {
@@ -149,11 +185,23 @@ function sorted(list) {
 
 function libraryView(page) {
   const head = el(`<div class="page-head"><div style="flex:1"><h1>Müziklerim</h1><div class="greet" style="padding:0" data-count></div></div></div>`);
-  const add = el(`<div style="padding:12px 20px 4px"><button class="add-btn">${icon('plus')}Şarkı Ekle</button></div>`);
-  $('button', add).onclick = openAdd;
+  const add = el(`<div style="padding:12px 20px 4px"><button class="add-btn">${icon('plus')}Şarkı Ekle</button>${isIOS ? '<button class="help-link">Şarkılar iPhone’da nerede? Nasıl eklenir? ›</button>' : ''}</div>`);
+  $('.add-btn', add).onclick = openAdd;
+  if (isIOS) $('.help-link', add).onclick = iosHelp;
   const segs = el('<div class="seg" style="padding-top:14px"></div>');
   const body = el('<div></div>');
-  page.append(head, add, segs, body);
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('installHint') === '0'; } catch {}
+  if (isIOS && !isStandalone && !dismissed) {
+    const hint = el(`<div class="install-hint"><div>${icon('upload')}</div><div class="ih-text"><b>Ana ekrana ekleyin</b><span>Safari’de Paylaş → Ana Ekrana Ekle</span></div><button class="icon-btn" aria-label="Kapat">${icon('close')}</button></div>`);
+    hint.onclick = e => {
+      if (e.target.closest('.icon-btn')) { hint.remove(); try { localStorage.setItem('installHint', '0'); } catch {} return; }
+      installHelp();
+    };
+    page.append(head, hint);
+  }
+  if (!page.contains(head)) page.append(head);
+  page.append(add, segs, body);
 
   let listHolder = null;
   function draw() {
@@ -189,7 +237,7 @@ function libraryView(page) {
     const items = sorted(isAll ? songs : liked);
     if (!items.length) {
       body.appendChild(el(isAll
-        ? `<div class="empty welcome">${icon('note')}<b>Hoş geldiniz!</b>Yukarıdaki <b>Şarkı Ekle</b> düğmesine basın ve telefonunuzdaki şarkıları seçin. İsterseniz bir klasörün tamamını da tek seferde ekleyebilirsiniz.<br><br>Eklenen şarkılar <b>internet olmadan</b> ve <b>reklamsız</b> çalar.</div>`
+        ? `<div class="empty welcome">${icon('note')}<b>Hoş geldiniz!</b>Yukarıdaki <b>Şarkı Ekle</b> düğmesine basın ve telefonunuzdaki şarkıları seçin. ${isIOS ? 'Şarkılar iPhone’un <b>Dosyalar</b> uygulamasından seçilir; birden fazla şarkıyı birlikte seçebilirsiniz.' : 'İsterseniz bir klasörün tamamını da tek seferde ekleyebilirsiniz.'}<br><br>Eklenen şarkılar <b>internet olmadan</b> ve <b>reklamsız</b> çalar.</div>`
         : `<div class="empty">${icon('heart')}<b>Favori şarkın yok</b>Çalarken ♡ simgesine dokunarak şarkıları buraya ekle.</div>`));
       return;
     }

@@ -1,5 +1,5 @@
 // İnternetsiz çalışma + "Paylaş → Müziklerim" ile gelen şarkıları alma
-const VERSION = 'v6';
+const VERSION = 'v7';
 const APP = 'app-' + VERSION;
 const IMG = 'img-v1';
 const FILES = [

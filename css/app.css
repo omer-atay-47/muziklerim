@@ -387,3 +387,15 @@ body.playing .row.now .eq i { animation: eq 0.9s ease-in-out infinite alternate;
 .item small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; margin-top: 1px; }
 .item span { min-width: 0; }
 .layer:not([hidden]) ~ .toast, .toast { z-index: 80; }
+.help-link { display: block; width: 100%; text-align: center; color: var(--muted); font-size: 14.5px; padding: 12px 0 2px; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255,255,255,.2); }
+.help ul { padding-left: 20px; margin: 8px 0; }
+.help ul li { margin: 7px 0; }
+.install-hint {
+  margin: 10px 20px 0; padding: 12px 6px 12px 14px; border-radius: 14px;
+  background: var(--card-2); border: 1px solid var(--line);
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+}
+.install-hint > div:first-child { width: 38px; height: 38px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; flex: none; }
+.install-hint .ic { width: 20px; height: 20px; }
+.ih-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ih-text span { color: var(--muted); font-size: 13.5px; }
