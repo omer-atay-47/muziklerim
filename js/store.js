@@ -128,38 +128,68 @@ export async function removeDownload(track) {
 /* ---------- Telefondan dosya ekleme ---------- */
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|wma|amr|3gp|webm|mp4)$/i;
 
-export async function importFiles(files) {
+const MIME = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', webm: 'audio/webm', mp4: 'audio/mp4', amr: 'audio/amr', '3gp': 'audio/3gpp', wma: 'audio/x-ms-wma' };
+export const isAudioFile = f => (f.type || '').startsWith('audio/') || AUDIO_EXT.test(f.name);
+let importChain = Promise.resolve();
+
+// Dosyaları sırayla ekler; aynı anda gelen eklemeler sıraya girer
+export function importFiles(files) {
+  importChain = importChain.then(() => doImport(files)).catch(e => console.error(e));
+  return importChain;
+}
+
+async function doImport(all) {
+  const files = [...all].filter(isAudioFile).filter(f => f.size > 20e3);
+  const ignored = all.length - files.length;
+  if (!files.length) {
+    emit('toast', all.length ? 'Seçilenler arasında şarkı dosyası bulunamadı' : 'Dosya seçilmedi');
+    return { added: 0 };
+  }
   if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch {} }
+  const { readTags } = await import('./tags.js');
   const existing = new Set([...lib.values()].filter(t => t.source === 'local').map(t => t.fileName + '|' + t.size));
-  let added = 0, skipped = 0, failed = 0;
+  let added = 0, skipped = 0, failed = 0, full = false;
+  emit('import', { done: 0, total: files.length });
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (!(f.type.startsWith('audio/') || AUDIO_EXT.test(f.name))) { failed++; continue; }
-    if (existing.has(f.name + '|' + f.size)) { skipped++; continue; }
-    if (files.length > 1) emit('toast', 'Ekleniyor ' + (i + 1) + ' / ' + files.length);
+    if (existing.has(f.name + '|' + f.size)) { skipped++; emit('import', { done: i + 1, total: files.length }); continue; }
+    const tags = /\.mp3$/i.test(f.name) || f.type === 'audio/mpeg' ? await readTags(f) : {};
     const base = f.name.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim() || 'Adsız şarkı';
-    const { artist, title } = splitName(base);
+    const fromName = splitName(base);
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    const type = f.type || MIME[ext] || 'audio/mpeg';
     const t = {
       id: 'l:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      title, artist, duration: 0, source: 'local', downloaded: true,
-      fileName: f.name, size: f.size, type: f.type || 'audio/mpeg', addedAt: Date.now(),
+      title: tags.title || fromName.title,
+      artist: tags.artist || fromName.artist,
+      album: tags.album || '',
+      duration: 0, source: 'local', downloaded: true,
+      fileName: f.name, size: f.size, type, addedAt: Date.now() + i,
+      hasArt: !!tags.picture,
     };
     try {
-      await db.saveDownload(t, f, null);
+      const blob = f.type ? f : new Blob([f], { type });
+      await db.saveDownload(t, blob, tags.picture || null);
       lib.set(t.id, t);
       existing.add(f.name + '|' + f.size);
       added++;
     } catch (err) {
       console.error(err);
       failed++;
-      if (err && err.name === 'QuotaExceededError') break;
+      if (err && err.name === 'QuotaExceededError') { full = true; break; }
     }
+    emit('import', { done: i + 1, total: files.length });
+    if (added && added % 15 === 0) emit('library');
   }
+  emit('import', null);
   emit('library');
-  let msg = added ? added + ' şarkı eklendi' : 'Şarkı eklenmedi';
+  let msg = full ? 'Telefonda yer kalmadı! ' : '';
+  msg += added ? added + ' şarkı eklendi ✓' : 'Yeni şarkı eklenmedi';
   if (skipped) msg += ' · ' + skipped + ' tanesi zaten vardı';
-  if (failed) msg += ' · ' + failed + ' dosya eklenemedi';
+  if (failed && !full) msg += ' · ' + failed + ' dosya eklenemedi';
+  if (ignored && !added) msg += ' · ' + ignored + ' dosya şarkı değildi';
   emit('toast', msg);
+  return { added };
 }
 
 export async function renameTrack(track, title, artist) {

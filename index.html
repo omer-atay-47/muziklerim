@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Müziklerim</title>
-<meta name="description" content="Reklamsız müzik: keşfet, dinle, indir, internetsiz çal.">
+<meta name="description" content="Reklamsız, internetsiz müzik çalar. Telefonundaki şarkıları kolayca ekle ve dinle.">
 <meta name="theme-color" content="#0b0b0e">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -16,22 +16,18 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<div id="offlineBar" class="offline-bar" hidden></div>
-
 <main id="view" class="view"></main>
 
+<div id="importBar" class="import-bar" hidden></div>
 <div id="mini" class="mini" hidden></div>
-
-<nav class="tabbar" id="tabbar">
-  <a href="#/kesfet" data-tab="kesfet" class="tab"></a>
-  <a href="#/ara" data-tab="ara" class="tab"></a>
-  <a href="#/kitaplik" data-tab="kitaplik" class="tab"></a>
-</nav>
 
 <section id="np" class="np" hidden aria-label="Şimdi çalıyor"></section>
 <div id="layer" class="layer" hidden></div>
 <div id="toast" class="toast" hidden></div>
+<div id="drop" class="drop" hidden><div>Şarkıları buraya bırakın</div></div>
+
 <input id="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,.wma,.amr" multiple hidden>
+<input id="folderInput" type="file" webkitdirectory multiple hidden>
 
 <noscript>Bu uygulama için JavaScript gerekli.</noscript>
 <script type="module" src="js/app.js"></script>

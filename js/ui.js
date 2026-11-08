@@ -84,7 +84,6 @@ export async function hydrate(root) {
 /* ---------- Şarkı satırı ---------- */
 export function dlBadge(id) {
   if (progress.has(id)) return `<span class="dlb ing" data-dl="${esc(id)}">%${progress.get(id)}</span>`;
-  if (isDownloaded(id)) return `<span class="dlb" data-dl="${esc(id)}">${icon('downloaded')}</span>`;
   return `<span class="dlb" data-dl="${esc(id)}"></span>`;
 }
 
@@ -182,7 +181,7 @@ export function sheet({ head, title, items = [], body }) {
   if (title) box.appendChild(el(`<h3>${esc(title)}</h3>`));
   if (body) box.appendChild(body);
   for (const it of items) {
-    const b = el(`<button class="item${it.danger ? ' danger' : ''}${it.on ? ' on' : ''}">${icon(it.icon)}<span>${esc(it.label)}</span>${it.right ? `<span class="r">${esc(it.right)}</span>` : ''}</button>`);
+    const b = el(`<button class="item${it.danger ? ' danger' : ''}${it.on ? ' on' : ''}">${icon(it.icon)}<span>${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.right ? `<span class="r">${esc(it.right)}</span>` : ''}</button>`);
     b.onclick = async () => { await closeLayer(); it.run && it.run(); };
     box.appendChild(b);
   }

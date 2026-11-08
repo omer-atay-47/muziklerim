@@ -32,8 +32,16 @@ function open() {
         }
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // Yeni sürüm açılmak isterse bu bağlantıyı kapat ki güncelleme takılmasın
+      db.onversionchange = () => { db.close(); dbp = null; };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
+    req.onblocked = () => {
+      window.dispatchEvent(new CustomEvent('db-blocked'));
+    };
   });
   return dbp;
 }
