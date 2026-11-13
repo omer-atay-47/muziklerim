@@ -1,6 +1,6 @@
-// Kitaplık durumu: indirilenler, beğenilenler, listeler, indirme kuyruğu
+// Kitaplık durumu: telefondan eklenen şarkılar/klipler, favoriler, listeler.
+// İnternet kullanılmaz; her şey telefonun içinde saklanır.
 import { db, splitName } from './db.js';
-import { api } from './api.js';
 
 const listeners = new Set();
 export const on = fn => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -8,9 +8,7 @@ export const emit = (type, data) => listeners.forEach(fn => { try { fn(type, dat
 
 export const lib = new Map();       // id -> track (veritabanındakiler)
 export let playlists = [];
-export const progress = new Map();  // id -> 0..100 (indiriliyor)
-const queue = [];
-let busy = false;
+export const progress = new Map();  // (eski sürümden kalma, artık boş)
 
 export async function loadLibrary() {
   const all = await db.allTracks();
@@ -48,130 +46,116 @@ export async function toggleLike(track) {
   return cur.liked;
 }
 
-/* ---------- İndirme ---------- */
-export function download(track) {
-  if (track.source !== 'audius' || isDownloaded(track.id) || progress.has(track.id)) return;
-  progress.set(track.id, 0);
-  queue.push(track);
-  emit('progress', { id: track.id, p: 0 });
-  pump();
-}
-
-async function pump() {
-  if (busy) return;
-  busy = true;
-  while (queue.length) {
-    const t = queue.shift();
-    try {
-      await fetchTrack(t);
-      emit('toast', '“' + t.title + '” indirildi');
-    } catch (err) {
-      console.error(err);
-      emit('toast', err && err.name === 'QuotaExceededError' ? 'Telefonda yer kalmadı' : '“' + t.title + '” indirilemedi');
-    }
-    progress.delete(t.id);
-    emit('progress', { id: t.id, done: true });
-    emit('library');
-  }
-  busy = false;
-}
-
-async function fetchTrack(t) {
-  if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch {} }
-  const res = await fetch(api.streamUrl(t.aid));
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const total = +res.headers.get('content-length') || 0;
-  const reader = res.body.getReader();
-  const chunks = [];
-  let got = 0, last = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    got += value.length;
-    const p = total ? Math.floor(got / total * 100) : Math.min(95, Math.floor(got / 8e6 * 100));
-    if (p !== last) { last = p; progress.set(t.id, p); emit('progress', { id: t.id, p }); }
-  }
-  const file = new Blob(chunks, { type: res.headers.get('content-type') || 'audio/mpeg' });
-  let artBlob = null;
-  if (t.artwork) {
-    const u = new URL(t.artwork);
-    const urls = [t.artwork, ...(t.artMirrors || []).map(h => h.replace(/\/$/, '') + u.pathname)];
-    for (const src of urls) {
-      try { const r = await fetch(src); if (r.ok) { artBlob = await r.blob(); break; } } catch {}
-    }
-  }
-  const cur = lib.get(t.id) || { ...strip(t), addedAt: Date.now() };
-  Object.assign(cur, { downloaded: true, downloadedAt: Date.now(), size: file.size, hasArt: !!artBlob });
-  await db.saveDownload(cur, file, artBlob);
-  lib.set(cur.id, cur);
-}
-
 export async function removeDownload(track) {
   const cur = lib.get(track.id);
   if (!cur) return;
-  if (cur.source === 'local') {
-    await db.deleteTrack(cur.id);
-    lib.delete(cur.id);
-    for (const p of playlists) {
-      if (p.trackIds.includes(cur.id)) { p.trackIds = p.trackIds.filter(x => x !== cur.id); await db.putPlaylist(p); }
-    }
-  } else {
-    cur.downloaded = false;
-    cur.hasArt = false;
-    await db.removeFiles(cur.id);
-    await saveMeta(cur);
+  await db.deleteTrack(cur.id);
+  lib.delete(cur.id);
+  for (const p of playlists) {
+    if (p.trackIds.includes(cur.id)) { p.trackIds = p.trackIds.filter(x => x !== cur.id); await db.putPlaylist(p); }
   }
   emit('library');
 }
 
 /* ---------- Telefondan dosya ekleme ---------- */
-const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|wma|amr|3gp|webm|mp4)$/i;
+const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|wma|amr)$/i;
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|3gp)$/i;
 
-const MIME = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', webm: 'audio/webm', mp4: 'audio/mp4', amr: 'audio/amr', '3gp': 'audio/3gpp', wma: 'audio/x-ms-wma' };
-export const isAudioFile = f => (f.type || '').startsWith('audio/') || AUDIO_EXT.test(f.name);
+const MIME = {
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg',
+  flac: 'audio/flac', amr: 'audio/amr', wma: 'audio/x-ms-wma',
+  mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska', '3gp': 'video/3gpp',
+};
+export const isVideoFile = f => (f.type || '').startsWith('video/') || VIDEO_EXT.test(f.name);
+export const isAudioFile = f => (f.type || '').startsWith('audio/') || AUDIO_EXT.test(f.name) || isVideoFile(f);
+
+// Videodan kapak olarak bir kare ve süre al
+function videoInfo(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    let done = false;
+    const finish = (thumb, duration, audioOnly = false) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      v.removeAttribute('src');
+      try { v.load(); } catch {}
+      URL.revokeObjectURL(url);
+      resolve({ thumb, duration: isFinite(duration) ? duration : 0, audioOnly });
+    };
+    const timer = setTimeout(() => finish(null, v.duration), 8000);
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.onloadedmetadata = () => {
+      if (!v.videoWidth) { finish(null, v.duration, true); return; }   // sadece ses içeren dosya
+      const d = isFinite(v.duration) ? v.duration : 0;
+      try { v.currentTime = Math.min(d * 0.25, 20) || 1; } catch { finish(null, d); }
+    };
+    v.onseeked = () => {
+      try {
+        const w = Math.min(640, v.videoWidth);
+        const h = Math.round(w * v.videoHeight / v.videoWidth);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(v, 0, 0, w, h);
+        c.toBlob(b => finish(b, v.duration), 'image/jpeg', 0.82);
+      } catch { finish(null, v.duration); }
+    };
+    v.onerror = () => finish(null, 0);
+    v.src = url;
+  });
+}
 let importChain = Promise.resolve();
 
 // Dosyaları sırayla ekler; aynı anda gelen eklemeler sıraya girer
 export function importFiles(files) {
-  importChain = importChain.then(() => doImport(files)).catch(e => console.error(e));
-  return importChain;
+  const job = importChain.then(() => doImport(files));
+  importChain = job.catch(e => console.error(e));
+  return job.catch(e => { console.error(e); return { added: 0, ids: [] }; });
 }
 
 async function doImport(all) {
   const files = [...all].filter(isAudioFile).filter(f => f.size > 20e3);
   const ignored = all.length - files.length;
   if (!files.length) {
-    emit('toast', all.length ? 'Seçilenler arasında şarkı dosyası bulunamadı' : 'Dosya seçilmedi');
-    return { added: 0 };
+    emit('toast', all.length ? 'Seçilenler arasında şarkı ya da klip dosyası bulunamadı' : 'Dosya seçilmedi');
+    return { added: 0, ids: [] };
   }
   if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch {} }
   const { readTags } = await import('./tags.js');
-  const existing = new Set([...lib.values()].filter(t => t.source === 'local').map(t => t.fileName + '|' + t.size));
+  const existing = new Map([...lib.values()].map(t => [t.fileName + '|' + t.size, t.id]));
+  const ids = [];   // seçilen dosyaların şarkı kimlikleri (yeni ya da zaten var)
   let added = 0, skipped = 0, failed = 0, full = false;
   emit('import', { done: 0, total: files.length });
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (existing.has(f.name + '|' + f.size)) { skipped++; emit('import', { done: i + 1, total: files.length }); continue; }
+    const key = f.name + '|' + f.size;
+    if (existing.has(key)) { skipped++; ids.push(existing.get(key)); emit('import', { done: i + 1, total: files.length }); continue; }
+    const video = isVideoFile(f);
     const tags = /\.mp3$/i.test(f.name) || f.type === 'audio/mpeg' ? await readTags(f) : {};
+    const vinfo = video ? await videoInfo(f) : null;
     const base = f.name.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim() || 'Adsız şarkı';
     const fromName = splitName(base);
     const ext = (f.name.split('.').pop() || '').toLowerCase();
-    const type = f.type || MIME[ext] || 'audio/mpeg';
+    const type = f.type || MIME[ext] || (video ? 'video/mp4' : 'audio/mpeg');
     const t = {
       id: 'l:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
       title: tags.title || fromName.title,
       artist: tags.artist || fromName.artist,
       album: tags.album || '',
-      duration: 0, source: 'local', downloaded: true,
+      duration: (vinfo && vinfo.duration) || 0, source: 'local', downloaded: true,
+      kind: video && !(vinfo && vinfo.audioOnly) ? 'video' : 'audio',
       fileName: f.name, size: f.size, type, addedAt: Date.now() + i,
-      hasArt: !!tags.picture,
+      hasArt: !!(tags.picture || (vinfo && vinfo.thumb)),
     };
     try {
       const blob = f.type ? f : new Blob([f], { type });
-      await db.saveDownload(t, blob, tags.picture || null);
+      await db.saveDownload(t, blob, tags.picture || (vinfo && vinfo.thumb) || null);
       lib.set(t.id, t);
-      existing.add(f.name + '|' + f.size);
+      existing.set(key, t.id);
+      ids.push(t.id);
       added++;
     } catch (err) {
       console.error(err);
@@ -188,17 +172,8 @@ async function doImport(all) {
   if (skipped) msg += ' · ' + skipped + ' tanesi zaten vardı';
   if (failed && !full) msg += ' · ' + failed + ' dosya eklenemedi';
   if (ignored && !added) msg += ' · ' + ignored + ' dosya şarkı değildi';
-  emit('toast', msg);
-  return { added };
-}
-
-export async function setVideo(track, videoId) {
-  const cur = lib.get(track.id) || { ...strip(track), addedAt: Date.now() };
-  if (videoId) cur.videoId = videoId; else delete cur.videoId;
-  lib.set(cur.id, cur);
-  await db.putTrack(cur);
-  emit('library');
-  return cur;
+  if (!(added === 1 && !skipped && !failed)) emit('toast', msg);
+  return { added, ids };
 }
 
 export async function renameTrack(track, title, artist) {

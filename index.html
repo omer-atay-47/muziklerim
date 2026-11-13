@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Müziklerim</title>
-<meta name="description" content="Reklamsız, internetsiz müzik çalar. Telefonundaki şarkıları kolayca ekle ve dinle.">
+<meta name="description" content="Reklamsız, internetsiz müzik ve klip çalar. Telefonundaki şarkıları ve klipleri ekle, dinle, izle.">
 <meta name="theme-color" content="#0b0b0e">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -22,12 +22,12 @@
 <div id="mini" class="mini" hidden></div>
 
 <section id="np" class="np" hidden aria-label="Şimdi çalıyor"></section>
-<div id="videoBox" class="video-box" hidden></div>
+<div id="mediaHost" class="media-host" aria-hidden="true"></div>
 <div id="layer" class="layer" hidden></div>
 <div id="toast" class="toast" hidden></div>
 <div id="drop" class="drop" hidden><div>Şarkıları buraya bırakın</div></div>
 
-<input id="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,.wma,.amr" multiple hidden>
+<input id="fileInput" type="file" accept="audio/*,video/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac,.wma,.amr,.mp4,.m4v,.mov,.webm,.mkv,.3gp" multiple hidden>
 <input id="folderInput" type="file" webkitdirectory multiple hidden>
 
 <noscript>Bu uygulama için JavaScript gerekli.</noscript>

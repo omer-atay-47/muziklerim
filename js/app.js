@@ -1,7 +1,6 @@
 import { icon } from './icons.js';
 import * as store from './store.js';
 import * as player from './player.js';
-import * as video from './video.js';
 import {
   $, $$, esc, el, fmtTime, fmtSize, art, hydrate, dlBadge, trackList,
   sheet, trackHead, askText, askConfirm, toast, tintFrom, pushLayer, closeLayer, go, setNowPlayingOpener,
@@ -49,28 +48,22 @@ const isStandalone = navigator.standalone === true || matchMedia('(display-mode:
 const folderSupported = !isIOS && 'webkitdirectory' in document.createElement('input');
 
 function openAdd() {
-  // iPhone'da dosya seçici doğrudan dokunuşla açılmalı
-  if (isIOS) { fileInput.click(); return; }
-  const items = [
-    { icon: 'note', label: 'Şarkıları seç', sub: 'Birden fazla şarkıyı birlikte seçebilirsiniz', run: () => fileInput.click() },
-  ];
-  if (folderSupported) items.push({ icon: 'library', label: 'Bir klasörün tamamını ekle', sub: 'Örneğin Müzik veya İndirilenler klasörü', run: () => folderInput.click() });
-  items.push({ icon: 'upload', label: 'Başka uygulamadan gönder', sub: 'Paylaş → Müziklerim (nasıl yapılır?)', run: shareHelp });
-  sheet({ title: 'Şarkı ekle', items });
+  // Dosya seçici doğrudan açılır; seçilen şarkı hemen çalar
+  fileInput.click();
 }
 
 function iosHelp() {
   const body = el(`<div class="help">
-    <p><b>Şarkı Ekle</b>’ye basınca iPhone’un <b>Dosyalar</b> ekranı açılır.</p>
+    <p><b>Şarkı Ekle</b>’ye basınca iPhone şarkıyı nereden seçeceğinizi sorar: <b>Dosyalar</b> ya da (klipler için) <b>Fotoğraflar</b>.</p>
     <ol>
       <li>Şarkının durduğu yere gidin (<b>iCloud Drive</b>, <b>iPhone’umda</b> veya <b>İndirilenler</b>).</li>
       <li>Birden fazla şarkı için sağ üstteki <b>Seç</b>’e dokunun, şarkıları işaretleyin.</li>
-      <li><b>Aç</b>’a basın. Şarkılar Müziklerim’e eklenir.</li>
+      <li><b>Aç</b>’a basın. Şarkı eklenir ve hemen çalmaya başlar.</li>
     </ol>
     <p><b>Şarkılar Dosyalar’a nasıl gelir?</b></p>
     <ul>
       <li><b>WhatsApp’tan gelen şarkı:</b> şarkıya dokunun → Paylaş ${icon('upload')} → <b>Dosyalar’a Kaydet</b>.</li>
-      <li><b>Bilgisayardaki şarkılar:</b> bilgisayarda <b>icloud.com</b> → iCloud Drive’a yükleyin. iPhone’da Dosyalar → iCloud Drive’da görünür.</li>
+      <li><b>Klip videosu:</b> Fotoğraflar’daki ya da Dosyalar’daki video (mp4, mov) seçilirse klibiyle birlikte oynar.</li>
       <li><b>Mail ile gelen şarkı:</b> eke basılı tutun → <b>Dosyalar’a Kaydet</b>.</li>
     </ul>
     <p class="small">Not: Apple Music’ten indirilen şarkılar Apple’ın korumasındadır. Bu şarkıları hiçbir başka uygulama açamaz.</p>
@@ -105,11 +98,33 @@ function shareHelp() {
   sheet({ title: 'Başka uygulamadan gönderme', body, items: [{ icon: 'downloaded', label: 'Anladım' }] });
 }
 
-fileInput.addEventListener('change', e => {
+fileInput.addEventListener('change', async e => {
   const files = [...e.target.files];
   e.target.value = '';
-  if (files.length) store.importFiles(files);
+  if (!files.length) return;
+  const { ids } = await store.importFiles(files);
+  playSelected(ids);
 });
+
+// Seçilen şarkıyı (birden fazlaysa ilkini) hemen çal ve çalar ekranını aç
+function playSelected(ids) {
+  if (!ids || !ids.length) return;
+  if (location.hash.startsWith('#/listem')) go('#/');
+  libTab = 'tum';
+  libFilter = '';
+  const all = sorted([...store.lib.values()].filter(t => t.downloaded));
+  let list = all;
+  let start = all.findIndex(t => t.id === ids[0]);
+  if (ids.length > 1) {
+    // birden fazla seçildiyse önce seçilenler çalsın, sonra diğerleri
+    const chosen = ids.map(id => store.lib.get(id)).filter(Boolean);
+    list = [...chosen, ...all.filter(t => !ids.includes(t.id))];
+    start = 0;
+  }
+  if (start < 0) return;
+  player.playList(list, start);
+  setTimeout(openNP, 150);
+}
 folderInput.addEventListener('change', e => {
   const files = [...e.target.files];
   e.target.value = '';
@@ -346,8 +361,6 @@ function trackMenu(track, ctxPlaylist) {
     { icon: 'addList', label: 'Listeye ekle', run: () => chooseList(t) },
   ];
   if (ctxPlaylist) items.push({ icon: 'close', label: 'Bu listeden çıkar', run: () => store.removeFromPlaylist(ctxPlaylist, t.id) });
-  items.push({ icon: 'video', label: t.videoId ? 'Klibi değiştir' : 'Klip ekle', sub: t.videoId ? '' : 'YouTube’daki klibini bu şarkıya bağla', run: () => openClipSheet(t) });
-  if (t.videoId) items.push({ icon: 'close', label: 'Klibi kaldır', run: async () => { await store.setVideo(t, null); player.refreshQueueMeta(); if (video.state.trackId === t.id) exitVideo(true); toast('Klip kaldırıldı'); } });
   if (t.source === 'local') items.push({ icon: 'edit', label: 'Adını düzenle', run: () => renameLocal(t) });
   if (t.downloaded) {
     items.push({ icon: 'trash', label: 'Sil', danger: true, run: async () => {
@@ -366,46 +379,6 @@ async function renameLocal(t) {
   await store.renameTrack(t, title, artist);
   player.refreshQueueMeta();
   renderMini(); if (!np.hidden) renderNP();
-}
-
-/* ================== Klip bağlama ================== */
-function openClipSheet(track) {
-  const t = store.known(track);
-  const body = el(`<div class="help">
-    <p>Şarkının YouTube’daki klibini <b>bir kez</b> bağlayın; sonra çalarken <b>Klip</b>’e basınca video oynar.</p>
-    <ol>
-      <li><b>YouTube’da bul</b>’a basın ve klibi açın.</li>
-      <li>Videonun altındaki <b>Paylaş</b> → <b>Kopyala</b>’ya dokunun.</li>
-      <li>Buraya dönüp <b>Bağlantıyı yapıştır</b>’a basın.</li>
-    </ol>
-    <div class="clip-actions">
-      <a class="btn" target="_blank" rel="noopener" href="${esc(video.searchUrl(t))}">${icon('search')}YouTube’da bul</a>
-      <button class="btn primary" data-paste>${icon('link')}Bağlantıyı yapıştır</button>
-    </div>
-    <p class="small">Klip YouTube’dan oynatılır, bu yüzden internet gerekir. Şarkının kendisi yine internetsiz çalar.</p>
-  </div>`);
-  // Pano okuma, dokunuşun hemen içinde yapılmalı (iPhone için)
-  $('[data-paste]', body).onclick = async () => {
-    let text = '';
-    try { if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText(); } catch {}
-    let id = video.parseVideoId(text);
-    await closeLayer();
-    if (!id) {
-      const v = await askText('Klip bağlantısı', text && text.length < 300 ? text : '', 'Kaydet', 'https://youtu.be/…');
-      if (!v) return;
-      id = video.parseVideoId(v);
-      if (!id) { toast('Bu bir YouTube bağlantısı değil'); return; }
-    }
-    await store.setVideo(t, id);
-    player.refreshQueueMeta();
-    toast('Klip bağlandı ✓');
-    const cur = player.current();
-    if (cur && cur.id === t.id) {
-      if (np.hidden) openNP();
-      enterVideo();
-    }
-  };
-  sheet({ head: trackHead(t), body, items: t.videoId ? [{ icon: 'close', label: 'Klibi kaldır', run: async () => { await store.setVideo(t, null); player.refreshQueueMeta(); if (video.state.trackId === t.id) exitVideo(true); toast('Klip kaldırıldı'); } }] : [] });
 }
 
 function chooseList(t) {
@@ -459,6 +432,8 @@ async function applyTint(t) {
 
 /* ================== Tam ekran çalar ================== */
 const np = $('#np');
+const mediaHost = $('#mediaHost');
+
 function openNP() {
   if (!np.hidden || !player.current()) return;
   np.hidden = false;
@@ -467,82 +442,36 @@ function openNP() {
   pushLayer(() => {
     np.hidden = true;
     document.body.style.overflow = '';
-    if (video.state.active) exitVideo(true);
-    videoSticky = false;
+    parkVideo();
   });
 }
 setNowPlayingOpener(openNP);
 
-/* ---------- Klip modu ---------- */
-let videoSticky = false;   // kullanıcı klip modundaysa sonraki şarkıda da klibi aç
-let videoTimer = null;
-
-function enterVideo() {
-  const t = player.current();
-  if (!t || !t.videoId) return;
-  if (!online()) { toast('Klip için internet gerekir'); return; }
-  const start = player.time().cur;
-  if (player.isPlaying()) player.audio.pause();
-  videoSticky = true;
-  video.open(t.videoId, t.id, start, {
-    onState: () => { renderNPControls(); },
-    onEnded: () => { exitVideo(false); player.next(true); },
-    onError: msg => { toast(msg, 5000); exitVideo(true); videoSticky = false; },
-  });
-  renderNP();
-  clearInterval(videoTimer);
-  videoTimer = setInterval(updateTime, 500);
-}
-
-// resume: klibin kaldığı yerden şarkıyı devam ettir
-function exitVideo(resume) {
-  if (!video.state.active) return;
-  const at = video.close();
-  clearInterval(videoTimer);
-  if (resume) {
-    const { dur } = player.time();
-    if (at > 0 && (!dur || at < dur)) player.seek(at);
-    player.audio.play().catch(() => {});
-  }
-  if (!np.hidden) renderNP();
-}
-
-function placeVideo() {
-  if (!video.state.active || np.hidden) return;
-  video.place($('.video-slot', np));
-}
-window.addEventListener('resize', placeVideo);
-np.addEventListener('animationend', placeVideo);
-// Düzen değişirse (yazı tipi, döndürme vb.) videoyu yerinde tut
-if ('ResizeObserver' in window) new ResizeObserver(placeVideo).observe(np);
-window.addEventListener('orientationchange', () => setTimeout(placeVideo, 300));
-
-function renderNPControls() {
-  const btn = $('[data-pp]', np);
-  if (!btn) return;
-  const playing = video.state.active ? video.state.playing : player.isPlaying();
-  btn.innerHTML = icon(playing ? 'pause' : 'play');
-  btn.setAttribute('aria-label', playing ? 'Duraklat' : 'Çal');
+// Video öğesini çalar kapalıyken görünmez yerde tut (çalmaya devam eder)
+function parkVideo() {
+  const v = player.video;
+  if (v.parentNode !== mediaHost) mediaHost.appendChild(v);
 }
 
 function renderNP() {
   const t = player.current();
   if (!t) { if (!np.hidden) closeLayer(); return; }
+  npTrackId = t.id;
   const s = player.state;
-  // klip başka bir şarkıya aitse kapat
-  if (video.state.active && video.state.trackId !== t.id) exitVideo(false);
-  const vid = video.state.active;
-  const playing = vid ? video.state.playing : player.isPlaying();
+  const playing = player.isPlaying();
   const liked = store.isLiked(t.id);
   const sleepOn = s.sleepAt || s.sleepEnd;
-  np.classList.toggle('video-mode', vid);
+  const isClip = player.isVideo(t);
+  // innerHTML yenilenmeden önce videoyu kenara al ki durmasın
+  parkVideo();
+  np.classList.toggle('video-mode', isClip);
   np.innerHTML = `
     <div class="np-top">
       <button class="icon-btn" data-close aria-label="Kapat">${icon('down')}</button>
-      <span class="label">Şimdi çalıyor</span>
+      <span class="label">${isClip ? 'Klip' : 'Şimdi çalıyor'}</span>
       <button class="icon-btn" data-more aria-label="Seçenekler">${icon('more')}</button>
     </div>
-    <div class="np-art-wrap">${vid ? '<div class="video-slot"></div>' : art(t, 'np-art')}</div>
+    <div class="np-art-wrap">${isClip ? '<div class="video-slot"></div>' : art(t, 'np-art')}</div>
     <div class="np-info">
       <div class="meta"><div class="np-title">${esc(t.title)}</div><div class="np-artist">${esc(t.artist || 'Müziklerim')}</div></div>
       <button class="icon-btn${liked ? ' liked' : ''}" data-like aria-label="Favorilere ekle">${icon(liked ? 'heartFill' : 'heart')}</button>
@@ -557,12 +486,33 @@ function renderNP() {
     </div>
     <div class="np-bottom">
       <button class="btn" data-q>${icon('queue')}Sıradakiler</button>
-      <button class="btn clip${vid ? ' on' : ''}${t.videoId ? ' has' : ''}" data-clip>${icon(vid ? 'note' : 'video')}${vid ? 'Sadece ses' : 'Klip'}</button>
+      ${isClip ? `<button class="btn" data-fs>${icon('video')}Tam ekran</button>` : ''}
       <button class="btn${sleepOn ? ' on' : ''}" data-sl>${icon('moon')}${sleepLabel()}</button>
     </div>`;
+  if (isClip) {
+    const slot = $('.video-slot', np);
+    slot.appendChild(player.video);
+    slot.onclick = () => player.toggle();   // videoya dokununca durdur/oynat
+  }
   hydrate(np);
   updateTime();
-  if (vid) { setTimeout(placeVideo, 0); setTimeout(placeVideo, 350); }
+}
+
+function renderNPControls() {
+  const btn = $('[data-pp]', np);
+  if (!btn) return;
+  const playing = player.isPlaying();
+  btn.innerHTML = icon(playing ? 'pause' : 'play');
+  btn.setAttribute('aria-label', playing ? 'Duraklat' : 'Çal');
+  btn.classList.toggle('loading', player.state.loading);
+}
+
+function goFullscreen() {
+  const v = player.video;
+  try {
+    if (v.requestFullscreen) v.requestFullscreen().catch(() => {});
+    else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();   // iPhone
+  } catch {}
 }
 
 function sleepLabel() {
@@ -573,26 +523,16 @@ function sleepLabel() {
 }
 
 let seeking = false;
+let npTrackId = null;
 np.addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
   const t = player.current();
   if (b.matches('[data-close]')) closeLayer();
-  else if (b.matches('[data-clip]')) {
-    if (video.state.active) { videoSticky = false; exitVideo(true); }
-    else if (t.videoId) enterVideo();
-    else openClipSheet(t);
-  }
-  else if (b.matches('[data-pp]')) { if (video.state.active) video.toggle(); else player.toggle(); }
-  else if (b.matches('[data-nx]')) { if (video.state.active) exitVideo(false); player.next(); }
-  else if (b.matches('[data-pv]')) {
-    if (video.state.active) {
-      if (video.time().cur > 3) { video.seek(0); return; }
-      exitVideo(false);
-      player.seek(0);
-    }
-    player.prev();
-  }
+  else if (b.matches('[data-pp]')) player.toggle();
+  else if (b.matches('[data-nx]')) player.next();
+  else if (b.matches('[data-pv]')) player.prev();
+  else if (b.matches('[data-fs]')) goFullscreen();
   else if (b.matches('[data-sh]')) toast(player.toggleShuffle() ? 'Karışık çalma açık' : 'Karışık çalma kapalı');
   else if (b.matches('[data-rp]')) { const r = player.cycleRepeat(); toast(r === 'all' ? 'Liste bitince baştan başlar' : r === 'one' ? 'Bu şarkı tekrarlanır' : 'Tekrar kapalı'); }
   else if (b.matches('[data-like]')) store.toggleLike(t).then(l => { toast(l ? 'Favorilere eklendi' : 'Favorilerden çıkarıldı'); renderNP(); });
@@ -603,22 +543,19 @@ np.addEventListener('click', e => {
 np.addEventListener('input', e => {
   if (e.target.type !== 'range') return;
   seeking = true;
-  const { dur } = nowTime();
+  const { dur } = player.time();
   e.target.style.setProperty('--p', (e.target.value / 10) + '%');
   const c = $('[data-cur]', np); if (c) c.textContent = fmtTime(e.target.value / 1000 * dur);
 });
 np.addEventListener('change', e => {
   if (e.target.type !== 'range') return;
-  const { dur } = nowTime();
-  if (video.state.active) video.seek(e.target.value / 1000 * dur);
-  else player.seek(e.target.value / 1000 * dur);
+  const { dur } = player.time();
+  player.seek(e.target.value / 1000 * dur);
   seeking = false;
 });
 
-const nowTime = () => video.state.active ? video.time() : player.time();
-
 function updateTime() {
-  const { cur, dur } = nowTime();
+  const { cur, dur } = player.time();
   const p = dur ? Math.min(100, cur / dur * 100) : 0;
   const bar = $('.bar i', mini);
   if (bar) bar.style.width = p + '%';
@@ -670,12 +607,11 @@ store.on((type, data) => {
     for (const r of $$('.view .row[data-id]')) r.classList.toggle('now', !!t && r.dataset.id === t.id);
     renderMini();
     if (!np.hidden) {
-      // klip modundayken şarkı değişirse yeni şarkının klibini aç
-      if (videoSticky && !video.state.active && !player.state.loading && t && t.videoId && online() && player.isPlaying()) { enterVideo(); return; }
-      if (!video.state.active || video.state.trackId !== (t && t.id)) renderNP();
+      // şarkı değiştiyse ekranı yeniden çiz, değişmediyse sadece düğmeleri güncelle
+      if (!t || t.id !== npTrackId || !$('.np-title', np)) renderNP();
       else renderNPControls();
     }
-  } else if (type === 'time') { if (!video.state.active) updateTime(); }
+  } else if (type === 'time') updateTime();
   else if (type === 'progress') {
     for (const b of $$(`[data-dl="${CSS.escape(data.id)}"]`)) b.outerHTML = dlBadge(data.id);
   }
@@ -684,7 +620,7 @@ store.on((type, data) => {
 /* Klavye kısayolları (bilgisayarda) */
 document.addEventListener('keydown', e => {
   if (e.target.matches('input, textarea')) return;
-  if (e.code === 'Space') { e.preventDefault(); if (video.state.active) video.toggle(); else player.toggle(); }
+  if (e.code === 'Space') { e.preventDefault(); player.toggle(); }
   else if (e.key === 'ArrowRight' && e.shiftKey) player.next();
   else if (e.key === 'ArrowLeft' && e.shiftKey) player.prev();
 });

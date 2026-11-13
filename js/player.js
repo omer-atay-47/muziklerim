@@ -1,10 +1,23 @@
-// Çalar: sıra, karışık/tekrar, kilit ekranı kontrolleri, uyku zamanlayıcı
+// Çalar: sıra, karışık/tekrar, kilit ekranı kontrolleri, uyku zamanlayıcı.
+// Her şey telefondaki dosyalardan çalar; internet kullanılmaz.
+// Ses dosyaları <audio> ile, klipler (video dosyaları) <video> ile oynatılır.
 import { db } from './db.js';
-import { api } from './api.js';
 import { emit, isDownloaded, known, lib, pushRecent } from './store.js';
 
-const audio = new Audio();
-audio.preload = 'auto';
+const audioEl = new Audio();
+audioEl.preload = 'auto';
+
+const videoEl = document.createElement('video');
+videoEl.preload = 'auto';
+videoEl.playsInline = true;
+videoEl.setAttribute('playsinline', '');
+videoEl.setAttribute('webkit-playsinline', '');
+videoEl.className = 'np-video';
+// Çalar kapalıyken video görünmez bir yerde çalmaya devam eder
+const host = document.getElementById('mediaHost');
+host.appendChild(videoEl);
+
+let media = audioEl;   // şu an kullanılan oynatıcı
 
 const ls = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
@@ -25,14 +38,26 @@ let loadSeq = 0;
 let errStreak = 0;
 let sleepTimer = null;
 
+export const isVideo = t => !!t && t.kind === 'video';
 export const current = () => state.queue[state.index] || null;
-export const isPlaying = () => !audio.paused;
-export const time = () => ({ cur: audio.currentTime || 0, dur: audio.duration || (current() && current().duration) || 0 });
+export const isPlaying = () => !media.paused;
+export const time = () => ({ cur: media.currentTime || 0, dur: (isFinite(media.duration) && media.duration) || (current() && current().duration) || 0 });
+export const video = videoEl;
+export const showsVideo = () => media === videoEl && videoEl.videoWidth > 0;
 
 const saveQueue = () => { ls.set('queue', state.queue.slice(0, 300)); ls.set('qindex', state.index); };
 const changed = () => emit('player');
 
-export const canPlay = t => isDownloaded(t.id) || (t.source === 'audius' && navigator.onLine);
+export const canPlay = t => isDownloaded(t.id);
+
+function useElement(el) {
+  if (media === el) return;
+  const other = media;
+  other.pause();
+  other.removeAttribute('src');
+  try { other.load(); } catch {}
+  media = el;
+}
 
 async function load(autoplay = true, startAt = 0) {
   const t = current();
@@ -40,34 +65,26 @@ async function load(autoplay = true, startAt = 0) {
   const seq = ++loadSeq;
   state.loading = true;
   changed();
-  if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
-  let src;
-  if (isDownloaded(t.id)) {
-    const blob = await db.getFile(t.id);
-    if (seq !== loadSeq) return;
-    if (blob) { objUrl = URL.createObjectURL(blob); src = objUrl; }
-  }
-  if (!src && t.source === 'audius') src = api.streamUrl(t.aid);
-  if (!src) {
+  const blob = await db.getFile(t.id).catch(() => null);
+  if (seq !== loadSeq) return;
+  if (!blob) {
     state.loading = false;
     emit('toast', 'Bu şarkı artık telefonda yok');
-    return;
-  }
-  if (!isDownloaded(t.id) && !navigator.onLine) {
-    state.loading = false;
-    emit('toast', 'İnternet yok. Bu şarkı indirilmemiş.');
     changed();
     return;
   }
-  audio.src = src;
+  if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
+  objUrl = URL.createObjectURL(blob);
+  useElement(isVideo(t) ? videoEl : audioEl);
+  media.src = objUrl;
   if (startAt) {
-    audio.addEventListener('loadedmetadata', () => { try { audio.currentTime = startAt; } catch {} }, { once: true });
+    media.addEventListener('loadedmetadata', () => { try { media.currentTime = startAt; } catch {} }, { once: true });
   }
   saveQueue();
   ls.set('pos', 0);
   setMediaSession(t);
   if (autoplay) {
-    try { await audio.play(); pushRecent(t); } catch (e) { if (e.name !== 'AbortError') console.warn(e); }
+    try { await media.play(); pushRecent(t); } catch (e) { if (e.name !== 'AbortError') console.warn(e); }
   }
   state.loading = false;
   changed();
@@ -76,11 +93,9 @@ async function load(autoplay = true, startAt = 0) {
 export function playList(list, startIndex = 0) {
   if (!list.length) return;
   const items = list.map(known);
-  let start = items[startIndex];
-  if (!canPlay(start)) {
+  if (!canPlay(items[startIndex])) {
     const alt = items.findIndex(canPlay);
-    if (alt < 0) { emit('toast', 'İnternet yok. Bu listede indirilmiş şarkı yok.'); return; }
-    emit('toast', 'İnternet yok, indirilmiş şarkılar çalınıyor');
+    if (alt < 0) { emit('toast', 'Bu listede çalınabilecek şarkı yok'); return; }
     startIndex = alt;
   }
   state.queue = items;
@@ -132,10 +147,11 @@ export function removeAt(i) {
 
 export function toggle() {
   if (!current()) return;
-  if (!audio.src) { load(true, ls.get('pos', 0)); return; }
-  if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  if (!media.getAttribute('src')) { load(true, ls.get('pos', 0)); return; }
+  if (media.paused) media.play().catch(() => {}); else media.pause();
 }
 
+let manual = false;
 function pickNext(step) {
   const n = state.queue.length;
   if (!n) return -1;
@@ -153,29 +169,28 @@ function pickNext(step) {
   }
   return -1;
 }
-let manual = false;
 
 export function next(auto = false) {
-  if (auto && state.repeat === 'one') { audio.currentTime = 0; audio.play().catch(() => {}); return; }
+  if (auto && state.repeat === 'one') { media.currentTime = 0; media.play().catch(() => {}); return; }
   manual = !auto;
   const i = pickNext(1);
   manual = false;
-  if (i < 0) { audio.pause(); if (auto) { audio.currentTime = 0; } changed(); return; }
+  if (i < 0) { media.pause(); if (auto) media.currentTime = 0; changed(); return; }
   state.index = i;
   load(true);
 }
 
 export function prev() {
-  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  if (media.currentTime > 3) { media.currentTime = 0; return; }
   manual = true;
   const i = pickNext(-1);
   manual = false;
-  if (i < 0) { audio.currentTime = 0; return; }
+  if (i < 0) { media.currentTime = 0; return; }
   state.index = i;
   load(true);
 }
 
-export function seek(sec) { if (isFinite(sec)) audio.currentTime = sec; }
+export function seek(sec) { if (isFinite(sec)) media.currentTime = sec; }
 
 export function toggleShuffle() { state.shuffle = !state.shuffle; ls.set('shuffle', state.shuffle); changed(); return state.shuffle; }
 export function cycleRepeat() {
@@ -189,38 +204,48 @@ export function setSleep(minutes) {
   if (minutes === 'end') state.sleepEnd = true;
   else if (minutes > 0) {
     state.sleepAt = Date.now() + minutes * 60e3;
-    sleepTimer = setTimeout(() => { audio.pause(); state.sleepAt = 0; changed(); emit('toast', 'Uyku zamanlayıcı: müzik durduruldu'); }, minutes * 60e3);
+    sleepTimer = setTimeout(() => { media.pause(); state.sleepAt = 0; changed(); emit('toast', 'Uyku zamanlayıcı: müzik durduruldu'); }, minutes * 60e3);
   }
   changed();
 }
 
-/* Olaylar */
-audio.addEventListener('play', () => { errStreak = 0; changed(); });
-audio.addEventListener('pause', () => { ls.set('pos', audio.currentTime); changed(); });
-audio.addEventListener('waiting', () => emit('buffer', true));
-audio.addEventListener('playing', () => emit('buffer', false));
-audio.addEventListener('ended', () => {
-  if (state.sleepEnd) { state.sleepEnd = false; changed(); emit('toast', 'Uyku zamanlayıcı: müzik durduruldu'); return; }
-  next(true);
-});
+/* Olaylar (sadece kullanılan oynatıcıdan gelenler dikkate alınır) */
 let lastSave = 0;
-audio.addEventListener('timeupdate', () => {
-  emit('time');
-  const now = Date.now();
-  if (now - lastSave > 5000) { lastSave = now; ls.set('pos', audio.currentTime); }
-  if ('mediaSession' in navigator && navigator.mediaSession.setPositionState && isFinite(audio.duration)) {
-    try { navigator.mediaSession.setPositionState({ duration: audio.duration, position: Math.min(audio.currentTime, audio.duration), playbackRate: 1 }); } catch {}
-  }
-});
-audio.addEventListener('error', () => {
-  if (!audio.getAttribute('src')) return;
-  state.loading = false;
-  errStreak++;
-  changed();
-  if (errStreak >= Math.min(5, state.queue.length)) { emit('toast', 'Şarkı çalınamadı. Bağlantıyı kontrol edin.'); return; }
-  emit('toast', 'Şarkı çalınamadı, sıradakine geçiliyor');
-  setTimeout(() => next(false), 1200);
-});
+for (const el of [audioEl, videoEl]) {
+  const mine = fn => e => { if (e.target === media) fn(e); };
+  el.addEventListener('play', mine(() => { errStreak = 0; changed(); }));
+  el.addEventListener('pause', mine(() => { ls.set('pos', media.currentTime); changed(); }));
+  el.addEventListener('loadedmetadata', mine(() => {
+    const t = current();
+    if (t && isFinite(media.duration) && !t.duration) {
+      t.duration = media.duration;
+      const saved = lib.get(t.id);
+      if (saved && !saved.duration) { saved.duration = media.duration; db.putTrack(saved).catch(() => {}); }
+    }
+    changed();
+  }));
+  el.addEventListener('ended', mine(() => {
+    if (state.sleepEnd) { state.sleepEnd = false; changed(); emit('toast', 'Uyku zamanlayıcı: müzik durduruldu'); return; }
+    next(true);
+  }));
+  el.addEventListener('timeupdate', mine(() => {
+    emit('time');
+    const now = Date.now();
+    if (now - lastSave > 5000) { lastSave = now; ls.set('pos', media.currentTime); }
+    if ('mediaSession' in navigator && navigator.mediaSession.setPositionState && isFinite(media.duration)) {
+      try { navigator.mediaSession.setPositionState({ duration: media.duration, position: Math.min(media.currentTime, media.duration), playbackRate: 1 }); } catch {}
+    }
+  }));
+  el.addEventListener('error', mine(() => {
+    if (!media.getAttribute('src')) return;
+    state.loading = false;
+    errStreak++;
+    changed();
+    if (errStreak >= Math.min(5, state.queue.length)) { emit('toast', 'Bu dosya çalınamadı. Dosya bozuk ya da desteklenmiyor olabilir.'); return; }
+    emit('toast', 'Bu dosya çalınamadı, sıradakine geçiliyor');
+    setTimeout(() => next(false), 1200);
+  }));
+}
 
 /* Kilit ekranı / bildirim */
 async function setMediaSession(t) {
@@ -232,24 +257,25 @@ async function setMediaSession(t) {
     const b = await db.getArt(t.id);
     if (b) { artUrl = URL.createObjectURL(b); artwork = [{ src: artUrl, sizes: '480x480', type: b.type || 'image/jpeg' }]; }
   }
-  if (!artwork.length && t.artwork) artwork = [{ src: t.artwork, sizes: '480x480', type: 'image/jpeg' }];
   if (!artwork.length) artwork = [{ src: 'icon-512.png', sizes: '512x512', type: 'image/png' }];
   navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist || 'Müziklerim', album: 'Müziklerim', artwork });
 }
 if ('mediaSession' in navigator) {
   const set = (a, h) => { try { navigator.mediaSession.setActionHandler(a, h); } catch {} };
-  set('play', () => audio.play());
-  set('pause', () => audio.pause());
+  set('play', () => media.play());
+  set('pause', () => media.pause());
   set('previoustrack', prev);
   set('nexttrack', () => next(false));
-  set('seekto', d => { if (d.seekTime != null) audio.currentTime = d.seekTime; });
-  set('seekbackward', () => { audio.currentTime = Math.max(0, audio.currentTime - 10); });
-  set('seekforward', () => { audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 10); });
+  set('seekto', d => { if (d.seekTime != null) media.currentTime = d.seekTime; });
+  set('seekbackward', () => { media.currentTime = Math.max(0, media.currentTime - 10); });
+  set('seekforward', () => { media.currentTime = Math.min(media.duration || 0, media.currentTime + 10); });
 }
 
 /* Uygulama açılınca: son şarkıyı hazırla (çalmadan) */
 export function restore() {
-  state.queue = state.queue.map(known);
+  const curId = current() && current().id;
+  state.queue = state.queue.map(known).filter(t => isDownloaded(t.id));
+  state.index = state.queue.findIndex(t => t.id === curId);
   if (!current()) { state.index = -1; return; }
   setMediaSession(current());
   changed();
@@ -258,5 +284,3 @@ export function restore() {
 export function refreshQueueMeta() {
   state.queue = state.queue.map(t => lib.get(t.id) || t);
 }
-
-export { audio };

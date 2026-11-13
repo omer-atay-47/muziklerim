@@ -425,3 +425,11 @@ body.playing .row.now .eq i { animation: eq 0.9s ease-in-out infinite alternate;
 .clip-actions .btn.primary .ic { stroke-width: 1.9; }
 .vbadge { display: inline-flex; flex: none; color: #ff6b6b; }
 .vbadge .ic { width: 15px; height: 15px; }
+
+/* ---------- Telefondaki klipler (video dosyaları) ---------- */
+.media-host { position: fixed; left: -10px; top: -10px; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.video-slot { position: relative; overflow: hidden; cursor: pointer; }
+.np-video { width: 100%; height: 100%; display: block; object-fit: contain; background: #000; border-radius: 12px; }
+.media-host .np-video { width: 1px; height: 1px; }
+.np.video-mode .np-art-wrap { flex: 1; min-height: 0; display: flex; align-items: center; }
+.np.video-mode .video-slot { max-height: 100%; }

@@ -1,7 +1,7 @@
 {
   "name": "Müziklerim",
   "short_name": "Müziklerim",
-  "description": "Reklamsız, internetsiz müzik çalar. Telefonundaki şarkıları kolayca ekle ve dinle.",
+  "description": "Reklamsız, internetsiz müzik ve klip çalar.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -35,7 +35,7 @@
         {
           "name": "audio",
           "accept": [
-            "audio/*",
+            "audio/*", "video/*",
             ".mp3",
             ".m4a",
             ".aac",
