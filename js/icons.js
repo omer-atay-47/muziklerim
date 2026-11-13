@@ -30,6 +30,8 @@ const P = {
   playNext: '<path d="M4 6h11M4 12h11M4 18h7M15 15v6l5-3z"/>',
   addList: '<path d="M4 6h12M4 12h12M4 18h7M17 15v6M14 18h6"/>',
   playlist: '<path d="M4 6h16M4 11h16M4 16h9"/><circle cx="17" cy="18" r="2.5"/><path d="M19.5 18V11"/>',
+  video: '<rect x="2.5" y="5" width="19" height="14" rx="3.5"/><path d="M10 9.2v5.6l4.8-2.8z" class="f"/>',
+  link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 };
 

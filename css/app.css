@@ -399,3 +399,29 @@ body.playing .row.now .eq i { animation: eq 0.9s ease-in-out infinite alternate;
 .install-hint .ic { width: 20px; height: 20px; }
 .ih-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ih-text span { color: var(--muted); font-size: 13.5px; }
+
+/* ---------- Klip ---------- */
+.video-box {
+  position: fixed; z-index: 41; background: #000; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+}
+.video-box iframe, .video-box #ytFrame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+.np.video-mode .np-art-wrap { flex: none; padding: 18px 0 22px; }
+.np.video-mode { justify-content: flex-start; }
+.np.video-mode .np-info { margin-top: auto; }
+.video-slot { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; background: #000; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .np.video-mode .video-slot { width: auto; height: 62vh; margin: 0 auto; }
+}
+.np-bottom { gap: 8px; }
+.np-bottom .btn { flex: 1; padding: 0 10px; font-size: 13.5px; gap: 6px; min-width: 0; white-space: nowrap; }
+.np-bottom .btn .ic { width: 18px; height: 18px; flex: none; }
+.np-bottom .btn.clip.has { color: var(--text); background: rgba(255,255,255,.14); }
+.np-bottom .btn.clip.on { background: var(--accent); color: var(--accent-ink); }
+.clip-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; }
+.clip-actions .btn { flex: 1; min-width: 150px; color: var(--text); }
+.clip-actions .btn.primary { color: var(--accent-ink); }
+.clip-actions .btn.primary .ic { stroke-width: 1.9; }
+.vbadge { display: inline-flex; flex: none; color: #ff6b6b; }
+.vbadge .ic { width: 15px; height: 15px; }

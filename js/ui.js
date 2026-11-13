@@ -96,7 +96,7 @@ export function trackRow(t, i, opts = {}) {
   return `<div class="row${now ? ' now' : ''}${off ? ' off' : ''}" data-i="${i}" data-id="${esc(t.id)}">
     ${opts.numbered ? `<span class="num">${i + 1}</span>` : ''}
     <div class="art-wrap" style="position:relative">${art(t, 'sm')}<div class="eq"><i></i><i></i><i></i></div></div>
-    <div class="meta"><div class="t">${esc(t.title)}</div><div class="s">${dlBadge(t.id)}<span class="a">${esc(sub || 'Bilinmeyen sanatçı')}</span></div></div>
+    <div class="meta"><div class="t">${esc(t.title)}</div><div class="s">${dlBadge(t.id)}${t.videoId ? `<span class="vbadge" title="Klibi var">${icon('video')}</span>` : ''}<span class="a">${esc(sub || 'Bilinmeyen sanatçı')}</span></div></div>
     <button class="icon-btn" data-more aria-label="Seçenekler">${icon('more')}</button>
   </div>`;
 }
@@ -111,7 +111,12 @@ export function trackList(tracks, opts = {}, onMore) {
     const t = tracks[+row.dataset.i];
     if (e.target.closest('[data-more]')) { onMore(t, opts.ctx); return; }
     const cur = player.current();
-    if (cur && cur.id === t.id) { if (!player.isPlaying()) player.toggle(); openNowPlaying(); return; }
+    if (cur && cur.id === t.id) {
+      player.adoptQueue(tracks, +row.dataset.i);
+      if (!player.isPlaying()) player.toggle();
+      openNowPlaying();
+      return;
+    }
     player.playList(tracks, +row.dataset.i);
   });
   hydrate(box);

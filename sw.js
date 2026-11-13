@@ -1,10 +1,10 @@
 // İnternetsiz çalışma + "Paylaş → Müziklerim" ile gelen şarkıları alma
-const VERSION = 'v7';
+const VERSION = 'v9';
 const APP = 'app-' + VERSION;
 const IMG = 'img-v1';
 const FILES = [
   './', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png',
-  'css/app.css', 'js/app.js', 'js/ui.js', 'js/store.js', 'js/player.js', 'js/api.js', 'js/db.js', 'js/icons.js', 'js/tags.js',
+  'css/app.css', 'js/app.js', 'js/ui.js', 'js/store.js', 'js/player.js', 'js/api.js', 'js/db.js', 'js/icons.js', 'js/tags.js', 'js/video.js',
 ];
 
 self.addEventListener('install', e => {

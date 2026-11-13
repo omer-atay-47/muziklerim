@@ -88,6 +88,18 @@ export function playList(list, startIndex = 0) {
   load(true);
 }
 
+// Çalan şarkıyı kesmeden sırayı yeni listeyle değiştir
+export function adoptQueue(list, index) {
+  const items = list.map(known);
+  if (!items[index] || !current() || items[index].id !== current().id) return;
+  const same = items.length === state.queue.length && items.every((t, i) => t.id === state.queue[i].id);
+  if (same) return;
+  state.queue = items;
+  state.index = index;
+  saveQueue();
+  changed();
+}
+
 export function playShuffled(list) {
   if (!list.length) return;
   const arr = list.slice();

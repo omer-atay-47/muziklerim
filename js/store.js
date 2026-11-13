@@ -192,6 +192,15 @@ async function doImport(all) {
   return { added };
 }
 
+export async function setVideo(track, videoId) {
+  const cur = lib.get(track.id) || { ...strip(track), addedAt: Date.now() };
+  if (videoId) cur.videoId = videoId; else delete cur.videoId;
+  lib.set(cur.id, cur);
+  await db.putTrack(cur);
+  emit('library');
+  return cur;
+}
+
 export async function renameTrack(track, title, artist) {
   const cur = lib.get(track.id);
   if (!cur) return;
