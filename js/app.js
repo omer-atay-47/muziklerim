@@ -209,11 +209,41 @@ function sorted(list) {
   return l;
 }
 
+/* ---------- Favorilerim (ana ekranın en üstünde) ---------- */
+function drawFavorites(box, liked) {
+  box.innerHTML = '';
+  if (!liked) { box.hidden = true; return; }   // hiç şarkı yokken gösterme
+  box.hidden = false;
+  const favs = liked.slice().sort((a, b) => (b.likedAt || 0) - (a.likedAt || 0));   // en son favorilenen en başta
+  const head = el(`<div class="sec-head fav-head"><h2>${icon('heartFill')}Favorilerim</h2>${favs.length ? `<button class="link" data-all>${icon('play')}Hepsini çal</button>` : ''}</div>`);
+  box.appendChild(head);
+  if (!favs.length) {
+    box.appendChild(el(`<div class="fav-empty">${icon('heart')}<span>Çalarken <b>♡</b> simgesine dokunun; favori şarkılarınız burada, en üstte görünür.</span></div>`));
+    return;
+  }
+  const row = el(`<div class="hscroll fav-row">${favs.map((t, i) => `<div class="card fav-card" data-i="${i}" data-id="${esc(t.id)}">${art(t)}<div class="t">${esc(t.title)}</div><div class="s">${esc(t.artist || '')}</div></div>`).join('')}</div>`);
+  row.onclick = e => {
+    const c = e.target.closest('.card');
+    if (!c) return;
+    const t = favs[+c.dataset.i];
+    const cur = player.current();
+    if (cur && cur.id === t.id) { if (!player.isPlaying()) player.toggle(); openNP(); return; }
+    player.playList(favs, +c.dataset.i);
+  };
+  $('[data-all]', head).onclick = () => player.playList(favs, 0);
+  box.appendChild(row);
+  hydrate(row);
+  // çalan şarkıyı işaretle
+  const cur = player.current();
+  if (cur) for (const c of $$('.fav-card', row)) c.classList.toggle('now', favs[+c.dataset.i].id === cur.id);
+}
+
 function libraryView(page) {
   const head = el(`<div class="page-head"><div style="flex:1"><h1>Müziklerim</h1><div class="greet" style="padding:0" data-count></div></div></div>`);
   const add = el(`<div style="padding:12px 20px 4px"><button class="add-btn">${icon('plus')}Şarkı Ekle</button>${isIOS ? '<button class="help-link">Şarkılar iPhone’da nerede? Nasıl eklenir? ›</button>' : ''}</div>`);
   $('.add-btn', add).onclick = openAdd;
   if (isIOS) $('.help-link', add).onclick = iosHelp;
+  const favBox = el('<section class="fav-box" aria-label="Favorilerim"></section>');
   const segs = el('<div class="seg" style="padding-top:14px"></div>');
   const body = el('<div></div>');
   let dismissed = false;
@@ -227,7 +257,7 @@ function libraryView(page) {
     page.append(head, hint);
   }
   if (!page.contains(head)) page.append(head);
-  page.append(add, segs, body);
+  page.append(add, favBox, segs, body);
 
   let listHolder = null;
   function draw() {
@@ -236,6 +266,7 @@ function libraryView(page) {
     const liked = all.filter(t => t.liked);
     const pls = store.playlists;
     $('[data-count]', head).textContent = songs.length ? songs.length + ' şarkı · internetsiz çalar' : 'Reklamsız müzik çalar';
+    drawFavorites(favBox, songs.length ? liked : null);
     segs.innerHTML = [['tum', 'Tüm şarkılar', songs.length], ['fav', 'Favoriler', liked.length], ['liste', 'Listelerim', pls.length]]
       .map(([k, n, c]) => `<button class="chip${libTab === k ? ' on' : ''}" data-k="${k}">${n} <span style="opacity:.6">${c}</span></button>`).join('');
     segs.onclick = e => { const c = e.target.closest('.chip'); if (c && c.dataset.k !== libTab) { libTab = c.dataset.k; libFilter = ''; draw(); } };
@@ -516,6 +547,17 @@ function renderNPControls() {
   btn.innerHTML = icon(playing ? 'pause' : 'play');
   btn.setAttribute('aria-label', playing ? 'Duraklat' : 'Çal');
   btn.classList.toggle('loading', player.state.loading);
+  // karışık / tekrar düğmelerinin açık-kapalı görünümü
+  const s = player.state;
+  const sh = $('[data-sh]', np);
+  if (sh) { sh.classList.toggle('on', s.shuffle); sh.setAttribute('aria-pressed', String(s.shuffle)); }
+  const rp = $('[data-rp]', np);
+  if (rp) {
+    rp.classList.toggle('on', s.repeat !== 'off');
+    rp.classList.toggle('one', s.repeat === 'one');
+    rp.setAttribute('aria-pressed', String(s.repeat !== 'off'));
+    rp.innerHTML = icon(s.repeat === 'one' ? 'repeatOne' : 'repeat');
+  }
 }
 
 function goFullscreen() {
@@ -616,6 +658,9 @@ store.on((type, data) => {
     const t = player.current();
     document.body.classList.toggle('playing', player.isPlaying());
     for (const r of $$('.view .row[data-id]')) r.classList.toggle('now', !!t && r.dataset.id === t.id);
+    for (const c of $$('.fav-card')) {
+      c.classList.toggle('now', !!t && c.dataset.id === t.id);
+    }
     renderMini();
     if (!np.hidden) {
       // şarkı değiştiyse ekranı yeniden çiz, değişmediyse sadece düğmeleri güncelle

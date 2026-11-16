@@ -449,3 +449,28 @@ body.playing .row.now .eq i { animation: eq 0.9s ease-in-out infinite alternate;
 
 .add-btn { height: 46px; border-radius: 13px; font-size: 16px; font-weight: 750; gap: 8px; box-shadow: 0 4px 14px rgba(245, 184, 61, .16); }
 .add-btn .ic { width: 20px; height: 20px; stroke-width: 2.6; }
+
+/* ---------- Karışık / Tekrar: açık-kapalı belirgin olsun ---------- */
+.np-ctl .icon-btn.side { color: rgba(255,255,255,.42); background: transparent; transition: background .15s, color .15s, transform .1s; }
+.np-ctl .icon-btn.side.on { color: var(--accent); background: rgba(245, 184, 61, .18); }
+.np-ctl .icon-btn.side.on::after { bottom: 3px; }
+.np-ctl .icon-btn.side:active { transform: scale(.88); }
+
+/* ---------- Favorilerim (ana ekranın üstü) ---------- */
+.fav-box { margin-top: 18px; }
+.fav-head h2 { display: flex; align-items: center; gap: 8px; }
+.fav-head h2 .ic { width: 20px; height: 20px; color: #ff5d7a; }
+.fav-head .link { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 700; font-size: 14px; }
+.fav-head .link .ic { width: 15px; height: 15px; }
+.fav-row .fav-card { width: 120px; }
+.fav-row .fav-card .art { width: 120px; height: 120px; border-radius: 12px; }
+.fav-row .fav-card .t { font-size: 14px; }
+.fav-card.now .art { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.fav-card.now .t { color: var(--accent); }
+.fav-empty {
+  margin: 0 20px; padding: 14px 16px; border-radius: 14px;
+  background: var(--card); border: 1px dashed rgba(255,255,255,.12);
+  display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14.5px; line-height: 1.45;
+}
+.fav-empty .ic { width: 26px; height: 26px; color: #ff5d7a; flex: none; }
+.fav-empty b { color: var(--text); }
