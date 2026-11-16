@@ -79,6 +79,10 @@ export const db = {
     tx.objectStore('files').put(file, t.id);
     if (art) tx.objectStore('art').put(art, t.id);
   }),
+  putArt: (t, art) => run(['tracks', 'art'], 'readwrite', tx => {
+    tx.objectStore('tracks').put(t);
+    if (art) tx.objectStore('art').put(art, t.id);
+  }),
   removeFiles: id => run(['files', 'art'], 'readwrite', tx => {
     tx.objectStore('files').delete(id);
     tx.objectStore('art').delete(id);

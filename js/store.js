@@ -69,7 +69,7 @@ const MIME = {
 export const isVideoFile = f => (f.type || '').startsWith('video/') || VIDEO_EXT.test(f.name);
 export const isAudioFile = f => (f.type || '').startsWith('audio/') || AUDIO_EXT.test(f.name) || isVideoFile(f);
 
-// Videodan kapak olarak bir kare ve süre al
+// Videodan kapak olarak bir kare ve süre al (arka planda çalışır, aktarmayı bekletmez)
 function videoInfo(file) {
   return new Promise(resolve => {
     const url = URL.createObjectURL(file);
@@ -84,58 +84,98 @@ function videoInfo(file) {
       URL.revokeObjectURL(url);
       resolve({ thumb, duration: isFinite(duration) ? duration : 0, audioOnly });
     };
-    const timer = setTimeout(() => finish(null, v.duration), 8000);
+    const timer = setTimeout(() => finish(null, v.duration), 5000);
     v.muted = true;
     v.playsInline = true;
     v.preload = 'auto';
     v.onloadedmetadata = () => {
       if (!v.videoWidth) { finish(null, v.duration, true); return; }   // sadece ses içeren dosya
       const d = isFinite(v.duration) ? v.duration : 0;
-      try { v.currentTime = Math.min(d * 0.25, 20) || 1; } catch { finish(null, d); }
+      // başa yakın bir kare: dosyanın ortasına atlamaktan çok daha hızlı
+      try { v.currentTime = Math.min(d * 0.1, 8) || 1; } catch { finish(null, d); }
     };
     v.onseeked = () => {
       try {
-        const w = Math.min(640, v.videoWidth);
+        const w = Math.min(480, v.videoWidth);
         const h = Math.round(w * v.videoHeight / v.videoWidth);
         const c = document.createElement('canvas');
         c.width = w; c.height = h;
         c.getContext('2d').drawImage(v, 0, 0, w, h);
-        c.toBlob(b => finish(b, v.duration), 'image/jpeg', 0.82);
+        c.toBlob(b => finish(b, v.duration), 'image/jpeg', 0.8);
       } catch { finish(null, v.duration); }
     };
     v.onerror = () => finish(null, 0);
     v.src = url;
   });
 }
+
+// Kliplerin kapak karelerini aktarma bittikten sonra sırayla çıkar
+const thumbJobs = [];
+let thumbBusy = false;
+function queueThumb(id, file) {
+  thumbJobs.push({ id, file });
+  if (!thumbBusy) runThumbs();
+}
+async function runThumbs() {
+  thumbBusy = true;
+  // aktarma sürerken bekle; önce dosyalar kaydedilsin
+  await importChain.catch(() => {});
+  while (thumbJobs.length) {
+    const { id, file } = thumbJobs.shift();
+    const info = await videoInfo(file).catch(() => null);
+    const t = lib.get(id);
+    if (!t || !info) continue;
+    if (info.audioOnly) t.kind = 'audio';
+    if (info.duration && !t.duration) t.duration = info.duration;
+    if (info.thumb) t.hasArt = true;
+    try { await db.putArt(t, info.thumb); } catch (e) { console.warn(e); }
+    emit('library');
+  }
+  thumbBusy = false;
+}
+
+// Henüz kaydı bitmemiş dosyalar: hemen çalabilmek için bellekte tutulur
+const memFiles = new Map();
+export const memFile = id => memFiles.get(id) || null;
+
 let importChain = Promise.resolve();
 
-// Dosyaları sırayla ekler; aynı anda gelen eklemeler sıraya girer
-export function importFiles(files) {
-  const job = importChain.then(() => doImport(files));
+// Dosyaları sırayla ekler; aynı anda gelen eklemeler sıraya girer.
+// onFirst(id): seçilen ilk şarkı hazır olur olmaz (kaydı bitmeden) çağrılır, böylece hemen çalar.
+export function importFiles(files, opts = {}) {
+  const job = importChain.then(() => doImport(files, opts));
   importChain = job.catch(e => console.error(e));
   return job.catch(e => { console.error(e); return { added: 0, ids: [] }; });
 }
 
-async function doImport(all) {
+async function doImport(all, { onFirst } = {}) {
   const files = [...all].filter(isAudioFile).filter(f => f.size > 20e3);
   const ignored = all.length - files.length;
   if (!files.length) {
     emit('toast', all.length ? 'Seçilenler arasında şarkı ya da klip dosyası bulunamadı' : 'Dosya seçilmedi');
     return { added: 0, ids: [] };
   }
-  if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch {} }
+  if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(() => {}); }
   const { readTags } = await import('./tags.js');
   const existing = new Map([...lib.values()].map(t => [t.fileName + '|' + t.size, t.id]));
   const ids = [];   // seçilen dosyaların şarkı kimlikleri (yeni ya da zaten var)
   let added = 0, skipped = 0, failed = 0, full = false;
-  emit('import', { done: 0, total: files.length });
+  let firstSent = false;
+  const sendFirst = id => { if (!firstSent && onFirst) { firstSent = true; try { onFirst(id); } catch (e) { console.error(e); } } };
+  if (files.length > 1) emit('import', { done: 0, total: files.length });
+
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     const key = f.name + '|' + f.size;
-    if (existing.has(key)) { skipped++; ids.push(existing.get(key)); emit('import', { done: i + 1, total: files.length }); continue; }
+    if (existing.has(key)) {
+      skipped++;
+      ids.push(existing.get(key));
+      sendFirst(existing.get(key));
+      if (files.length > 1) emit('import', { done: i + 1, total: files.length });
+      continue;
+    }
     const video = isVideoFile(f);
-    const tags = /\.mp3$/i.test(f.name) || f.type === 'audio/mpeg' ? await readTags(f) : {};
-    const vinfo = video ? await videoInfo(f) : null;
+    const tags = !video && (/\.mp3$/i.test(f.name) || f.type === 'audio/mpeg') ? await readTags(f) : {};
     const base = f.name.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim() || 'Adsız şarkı';
     const fromName = splitName(base);
     const ext = (f.name.split('.').pop() || '').toLowerCase();
@@ -145,25 +185,36 @@ async function doImport(all) {
       title: tags.title || fromName.title,
       artist: tags.artist || fromName.artist,
       album: tags.album || '',
-      duration: (vinfo && vinfo.duration) || 0, source: 'local', downloaded: true,
-      kind: video && !(vinfo && vinfo.audioOnly) ? 'video' : 'audio',
+      duration: 0, source: 'local', downloaded: true,
+      kind: video ? 'video' : 'audio',
       fileName: f.name, size: f.size, type, addedAt: Date.now() + i,
-      hasArt: !!(tags.picture || (vinfo && vinfo.thumb)),
+      hasArt: !!tags.picture,
     };
+    const blob = f.type ? f : new Blob([f], { type });
+    // ilk şarkı: kaydı beklemeden listeye koy ve çalmaya başla
+    const early = !firstSent && !!onFirst;
+    if (early) {
+      memFiles.set(t.id, blob);
+      lib.set(t.id, t);
+      emit('library');
+      sendFirst(t.id);
+    }
     try {
-      const blob = f.type ? f : new Blob([f], { type });
-      await db.saveDownload(t, blob, tags.picture || (vinfo && vinfo.thumb) || null);
+      await db.saveDownload(t, blob, tags.picture || null);
       lib.set(t.id, t);
       existing.set(key, t.id);
       ids.push(t.id);
       added++;
+      if (video) queueThumb(t.id, f);
     } catch (err) {
       console.error(err);
       failed++;
-      if (err && err.name === 'QuotaExceededError') { full = true; break; }
+      if (early) lib.delete(t.id);
+      if (err && err.name === 'QuotaExceededError') { full = true; memFiles.delete(t.id); break; }
     }
-    emit('import', { done: i + 1, total: files.length });
-    if (added && added % 15 === 0) emit('library');
+    memFiles.delete(t.id);
+    if (files.length > 1) emit('import', { done: i + 1, total: files.length });
+    if (added && added % 10 === 0) emit('library');
   }
   emit('import', null);
   emit('library');

@@ -102,8 +102,18 @@ fileInput.addEventListener('change', async e => {
   const files = [...e.target.files];
   e.target.value = '';
   if (!files.length) return;
-  const { ids } = await store.importFiles(files);
-  playSelected(ids);
+  // ilk şarkı kopyalanmayı beklemeden hemen çalar; diğerleri arka planda eklenir
+  let firstId = null;
+  const { ids } = await store.importFiles(files, { onFirst: id => { firstId = id; playSelected([id]); } });
+  if (firstId && ids.length > 1) {
+    // birden fazla seçildiyse sıra: önce seçilenler, sonra diğerleri (çalan şarkı kesilmez)
+    const all = sorted([...store.lib.values()].filter(t => t.downloaded));
+    const chosen = ids.map(id => store.lib.get(id)).filter(Boolean);
+    const list = [...chosen, ...all.filter(t => !ids.includes(t.id))];
+    const cur = player.current();
+    const idx = cur ? list.findIndex(t => t.id === cur.id) : -1;
+    if (idx >= 0) player.adoptQueue(list, idx);
+  }
 });
 
 // Seçilen şarkıyı (birden fazlaysa ilkini) hemen çal ve çalar ekranını aç

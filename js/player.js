@@ -9,7 +9,7 @@
 //   ilerletmeye devam eder ve "çalıyor ama ses yok" gibi görünür.
 // - Bir bekçi, takılan ya da bitip geçmeyen şarkıyı fark edip düzeltir.
 import { db } from './db.js';
-import { emit, isDownloaded, known, lib, pushRecent } from './store.js';
+import { emit, isDownloaded, known, lib, memFile, pushRecent } from './store.js';
 
 const audioEl = new Audio();
 audioEl.preload = 'auto';
@@ -166,7 +166,7 @@ async function preloadNext() {
   const t = state.queue[i];
   if (nextPre && nextPre.id === t.id && nextPre.index === i) return;
   dropPre();
-  const blob = await db.getFile(t.id).catch(() => null);
+  const blob = memFile(t.id) || await db.getFile(t.id).catch(() => null);
   if (!blob) return;
   // bu arada sıra değiştiyse vazgeç
   if (state.queue[i] !== t) return;
@@ -187,7 +187,8 @@ async function load(autoplay = true, startAt = 0) {
   } else {
     state.loading = true;
     changed();
-    const blob = await db.getFile(t.id).catch(() => null);
+    // yeni seçilen şarkı henüz kaydedilmediyse bellekteki dosyadan hemen çal
+    const blob = memFile(t.id) || await db.getFile(t.id).catch(() => null);
     if (seq !== loadSeq) return;
     if (!blob) {
       state.loading = false;
