@@ -212,15 +212,11 @@ function sorted(list) {
 /* ---------- Favorilerim (ana ekranın en üstünde) ---------- */
 function drawFavorites(box, liked) {
   box.innerHTML = '';
-  if (!liked) { box.hidden = true; return; }   // hiç şarkı yokken gösterme
+  if (!liked || !liked.length) { box.hidden = true; return; }   // favori yoksa gösterme
   box.hidden = false;
   const favs = liked.slice().sort((a, b) => (b.likedAt || 0) - (a.likedAt || 0));   // en son favorilenen en başta
-  const head = el(`<div class="sec-head fav-head"><h2>${icon('heartFill')}Favorilerim</h2>${favs.length ? `<button class="link" data-all>${icon('play')}Hepsini çal</button>` : ''}</div>`);
+  const head = el(`<div class="sec-head fav-head"><h2>${icon('heartFill')}Favorilerim</h2><button class="link" data-all>${icon('play')}Hepsini çal</button></div>`);
   box.appendChild(head);
-  if (!favs.length) {
-    box.appendChild(el(`<div class="fav-empty">${icon('heart')}<span>Çalarken <b>♡</b> simgesine dokunun; favori şarkılarınız burada, en üstte görünür.</span></div>`));
-    return;
-  }
   const row = el(`<div class="hscroll fav-row">${favs.map((t, i) => `<div class="card fav-card" data-i="${i}" data-id="${esc(t.id)}">${art(t)}<div class="t">${esc(t.title)}</div><div class="s">${esc(t.artist || '')}</div></div>`).join('')}</div>`);
   row.onclick = e => {
     const c = e.target.closest('.card');
@@ -239,10 +235,8 @@ function drawFavorites(box, liked) {
 }
 
 function libraryView(page) {
-  const head = el(`<div class="page-head"><div style="flex:1"><h1>Müziklerim</h1><div class="greet" style="padding:0" data-count></div></div></div>`);
-  const add = el(`<div style="padding:12px 20px 4px"><button class="add-btn">${icon('plus')}Şarkı Ekle</button>${isIOS ? '<button class="help-link">Şarkılar iPhone’da nerede? Nasıl eklenir? ›</button>' : ''}</div>`);
-  $('.add-btn', add).onclick = openAdd;
-  if (isIOS) $('.help-link', add).onclick = iosHelp;
+  const head = el(`<div class="page-head"><h1>Müziklerim</h1><button class="add-btn small">${icon('plus')}Şarkı Ekle</button></div>`);
+  $('.add-btn', head).onclick = openAdd;
   const favBox = el('<section class="fav-box" aria-label="Favorilerim"></section>');
   const segs = el('<div class="seg" style="padding-top:14px"></div>');
   const body = el('<div></div>');
@@ -257,7 +251,7 @@ function libraryView(page) {
     page.append(head, hint);
   }
   if (!page.contains(head)) page.append(head);
-  page.append(add, favBox, segs, body);
+  page.append(favBox, segs, body);
 
   let listHolder = null;
   function draw() {
@@ -265,9 +259,10 @@ function libraryView(page) {
     const songs = all.filter(t => t.downloaded);
     const liked = all.filter(t => t.liked);
     const pls = store.playlists;
-    $('[data-count]', head).textContent = songs.length ? songs.length + ' şarkı · internetsiz çalar' : 'Reklamsız müzik çalar';
     drawFavorites(favBox, songs.length ? liked : null);
-    segs.innerHTML = [['tum', 'Tüm şarkılar', songs.length], ['fav', 'Favoriler', liked.length], ['liste', 'Listelerim', pls.length]]
+    if (libTab === 'fav') libTab = 'tum';
+    segs.hidden = !songs.length;
+    segs.innerHTML = [['tum', 'Şarkılar', songs.length], ['liste', 'Listelerim', pls.length]]
       .map(([k, n, c]) => `<button class="chip${libTab === k ? ' on' : ''}" data-k="${k}">${n} <span style="opacity:.6">${c}</span></button>`).join('');
     segs.onclick = e => { const c = e.target.closest('.chip'); if (c && c.dataset.k !== libTab) { libTab = c.dataset.k; libFilter = ''; draw(); } };
     body.innerHTML = '';
@@ -294,21 +289,22 @@ function libraryView(page) {
     const items = sorted(isAll ? songs : liked);
     if (!items.length) {
       body.appendChild(el(isAll
-        ? `<div class="empty welcome">${icon('note')}<b>Hoş geldiniz!</b>Yukarıdaki <b>Şarkı Ekle</b> düğmesine basın ve telefonunuzdaki şarkıları seçin. ${isIOS ? 'Şarkılar iPhone’un <b>Dosyalar</b> uygulamasından seçilir; birden fazla şarkıyı birlikte seçebilirsiniz.' : 'İsterseniz bir klasörün tamamını da tek seferde ekleyebilirsiniz.'}<br><br>Eklenen şarkılar <b>internet olmadan</b> ve <b>reklamsız</b> çalar.</div>`
+        ? `<div class="empty welcome">${icon('note')}<b>Henüz şarkı yok</b>Sağ üstteki <b>Şarkı Ekle</b>’ye basın.</div>`
         : `<div class="empty">${icon('heart')}<b>Favori şarkın yok</b>Çalarken ♡ simgesine dokunarak şarkıları buraya ekle.</div>`));
       return;
     }
-    const tools = el(`<div class="lib-tools">
-      ${items.length > 8 ? `<div class="search-field small">${icon('search')}<input type="search" placeholder="Şarkı veya sanatçı ara" autocomplete="off"></div>` : '<div style="flex:1"></div>'}
-      <button class="btn ghost sort">${icon('queue')}${SORTS[libSort]}</button>
-    </div>`);
+    const tools = el(`<div class="lib-tools">${items.length > 8 ? `<div class="search-field small">${icon('search')}<input type="search" placeholder="Ara" autocomplete="off"></div>` : ''}</div>`);
+    const acts = playButtons(() => filtered());
+    acts.classList.add('lib-actions');
+    acts.insertAdjacentHTML('beforeend', `<button class="btn round ghost sort" aria-label="Sırala: ${SORTS[libSort]}" title="Sırala">${icon('queue')}</button>`);
     const inp = $('input', tools);
     if (inp) { inp.value = libFilter; inp.oninput = () => { libFilter = inp.value; drawList(); }; }
-    $('.sort', tools).onclick = () => sheet({
+    $('.sort', acts).onclick = () => sheet({
       title: 'Sırala',
       items: Object.entries(SORTS).map(([k, label]) => ({ icon: k === libSort ? 'downloaded' : 'queue', label, on: k === libSort, run: () => { libSort = k; try { localStorage.setItem('sort', k); } catch {} draw(); } })),
     });
-    body.append(playButtons(() => filtered()), tools);
+    body.append(acts);
+    if (items.length > 8) body.append(tools);
     listHolder = el('<div></div>');
     body.appendChild(listHolder);
     const filtered = () => {
@@ -321,15 +317,6 @@ function libraryView(page) {
       listHolder.appendChild(l.length ? trackList(l, {}, trackMenu) : el('<div class="empty">Bulunamadı.</div>'));
     }
     drawList();
-    if (isAll) {
-      const st = el('<div class="storage"></div>');
-      body.appendChild(st);
-      if (navigator.storage && navigator.storage.estimate) {
-        navigator.storage.estimate().then(({ usage, quota }) => {
-          st.textContent = 'Kullanılan alan: ' + fmtSize(usage || 0) + (quota ? ' · Boş: ' + fmtSize(Math.max(0, quota - usage)) : '');
-        }).catch(() => {});
-      }
-    }
   }
   draw();
   let pending = false;

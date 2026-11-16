@@ -474,3 +474,17 @@ body.playing .row.now .eq i { animation: eq 0.9s ease-in-out infinite alternate;
 }
 .fav-empty .ic { width: 26px; height: 26px; color: #ff5d7a; flex: none; }
 .fav-empty b { color: var(--text); }
+
+/* ---------- Sade ana ekran ---------- */
+.page-head { align-items: center; padding-top: 22px; }
+.add-btn.small {
+  width: auto; flex: none; height: 40px; padding: 0 15px 0 12px; border-radius: 999px;
+  font-size: 15px; font-weight: 750; gap: 6px; box-shadow: none;
+}
+.add-btn.small .ic { width: 18px; height: 18px; stroke-width: 2.8; }
+.fav-box { margin-top: 10px; }
+.seg { padding-top: 18px !important; }
+.lib-actions { padding-bottom: 8px; }
+.lib-actions .sort { margin-left: auto; width: 44px; height: 44px; color: var(--muted); }
+.lib-tools:empty { display: none; }
+.lib-tools { padding-bottom: 8px; }
