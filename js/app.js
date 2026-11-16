@@ -492,6 +492,7 @@ function renderNP() {
   if (isClip) {
     const slot = $('.video-slot', np);
     slot.appendChild(player.video);
+    player.ensureVideo();   // ekran kilitliyken sese geçtiyse görüntüye geri dön
     slot.onclick = () => player.toggle();   // videoya dokununca durdur/oynat
   }
   hydrate(np);
@@ -612,6 +613,11 @@ store.on((type, data) => {
       else renderNPControls();
     }
   } else if (type === 'time') updateTime();
+  else if (type === 'visible') {
+    // ekran açıldı: çalar ekranı açıksa ve klip çalıyorsa görüntüye geri dön
+    const t = player.current();
+    if (!np.hidden && t && player.isVideo(t)) { renderNP(); }
+  }
   else if (type === 'progress') {
     for (const b of $$(`[data-dl="${CSS.escape(data.id)}"]`)) b.outerHTML = dlBadge(data.id);
   }
