@@ -1,5 +1,5 @@
 // İnternetsiz çalışma + "Paylaş → Müziklerim" ile gelen şarkıları alma
-const VERSION = 'v15';
+const VERSION = 'v16';
 const APP = 'app-' + VERSION;
 const IMG = 'img-v1';
 const FILES = [
@@ -8,7 +8,7 @@ const FILES = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(APP).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(APP).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -69,10 +69,15 @@ self.addEventListener('fetch', e => {
   }
   if (req.method !== 'GET') return;
 
-  // Uygulamanın kendi dosyaları: önce internet (güncel kalsın), olmazsa kayıtlı kopya
+  // Uygulamanın kendi dosyaları: önce internet (güncel kalsın), olmazsa kayıtlı kopya.
+  // cache: 'no-cache' → tarayıcının 10 dk'lık önbelleği atlanır; güncellemeden sonra
+  // eski ve yeni dosyalar karışıp uygulama bozulmaz (GitHub Pages için önemli).
   if (url.origin === location.origin) {
+    const fresh = req.mode === 'navigate'
+      ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
+      : fetch(req, { cache: 'no-cache' });
     e.respondWith(
-      fetch(req).then(res => {
+      fresh.then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(APP).then(c => c.put(req, copy)); }
         return res;
       }).catch(() => caches.match(req, { ignoreSearch: true })
